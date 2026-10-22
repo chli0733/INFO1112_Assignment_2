@@ -8,11 +8,10 @@ UNIT_URL="https://www.sydney.edu.au/units/INFO1112/2026-S2C-ND-CC"
 POPULATION_URL="https://dbr.abs.gov.au/processedData/csv/STE_1.csv"
 POPULATION_ROW_CODE="ERP_P_20"
 # constants for POI reference
-COORDINATE_URL="https://nominatim.openstreetmap.org/search"
-NEIGHBOUR_URL="https://overpass-api.de/api/interpreter"
-USER_AGENT="INFO1112-A2-server (student project)"
+# constants for POI reference (NSW Spatial Services, as in Lab 10)
+POI_URL="https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_POI/MapServer/0/query"
 POI_RADIUS=1000
-POI_LIMIT=15 
+POI_LIMIT=15
 
 WORKDIR="/tmp/a2server"
 LOCKDIR="$WORKDIR/locks"
@@ -21,7 +20,7 @@ SELF="$(readlink -f "$0")"
 
 # installs required tools for the running of the server, even if they are already downloaded as confirmation
 install_tools(){
-  apk add --no-cache curl html2text gnuplot nmap-ncat iproute2 >/dev/null
+  apk add --no-cache curl html2text gnuplot nmap-ncat iproute2 jq >/dev/null
 }
 
 # handles ONE client connection (ncat runs a copy of this for each client)
@@ -207,33 +206,40 @@ EOF
 handle_poi(){
   request="$1"
   found="$WORKDIR/found.json"
-  places="$WORKDIR/places.txt"
-  clean_places="$WORKDIR/clean_places.txt"
+  places="$WORKDIR/places.json"
   json="$WORKDIR/neighbours.json"
 
   # clear results from a previous request
-  rm -f "$found" "$places" "$clean_places"
+  rm -f "$found" "$places"
 
-  # if the request is used directly, it would look like the latitude,longitude directly
+  # if the request is already "lat,lon", use it directly
   if echo "$request" | grep -qE '^-?[0-9.]+,-?[0-9.]+$'; then
     latitude=$(echo "$request" | cut -d ',' -f1)
     longitude=$(echo "$request" | cut -d ',' -f2)
   else
-    # acts on behalf of the client to browse
-    search=$(echo "$request" | sed 's/ /+/g')
-    url="$COORDINATE_URL?q=$search+Sydney&format=json&limit=1"
-    curl -sf -A "$USER_AGENT" -o "$found" "$url" || {
-      echo "could not download $COORDINATE_URL" >&2
-      echo "could not download $COORDINATE_URL"
+    # POI names are stored in capitals; a ' in the name must be doubled for the where clause
+    name=$(echo "$request" | tr 'a-z' 'A-Z' | sed "s/'/''/g")
+
+    # ask the NSW POI service for the place with this exact name (like the lab's nswPOI.sh)
+    curl -sf -G --max-time 20 \
+      --data-urlencode "where=poiname='$name'" \
+      --data-urlencode "outFields=poiname,poitype" \
+      --data-urlencode "returnGeometry=true" \
+      --data-urlencode "outSR=4326" \
+      --data-urlencode "f=json" \
+      -o "$found" "$POI_URL" || {
+      echo "could not download $POI_URL" >&2
+      echo "could not download $POI_URL"
       exit 1
     }
-    # grabs latitude and longitude with grep (tr cleans any stray carriage returns)
-    latitude=$(grep -o '"lat":"[^"]*"' "$found" | head -n 1 | cut -d '"' -f4 | tr -d '\r')
-    longitude=$(grep -o '"lon":"[^"]*"' "$found" | head -n 1 | cut -d '"' -f4 | tr -d '\r')
+
+    # geometry.x is the longitude, geometry.y is the latitude (outSR=4326 = normal lat/lon)
+    longitude=$(jq -r '.features[0].geometry.x // empty' "$found")
+    latitude=$(jq -r '.features[0].geometry.y // empty' "$found")
   fi
 
   # if there is nothing in longitude and latitude, then an error is echo-ed
-  if [ -z "$latitude" ] || [ -z "$longitude" ]; then 
+  if [ -z "$latitude" ] || [ -z "$longitude" ]; then
     echo "the POI '$request' cannot be found" >&2
     echo "the POI '$request' cannot be found"
     exit 1
@@ -241,36 +247,49 @@ handle_poi(){
 
   echo "POI '$request' is at $latitude, $longitude" >&2
 
-  # FIX 3: Added :: before lat and lon in the out:csv block
-  query="[out:csv(name,::lat,::lon;false;\"|\")];node(around:$POI_RADIUS,$latitude,$longitude)[tourism][name];out $POI_LIMIT;"
-  
-  # FIX 2: Increased max-time to 45 seconds to prevent timeout on heavily loaded server
-  curl -sf --retry 2 --max-time 45 --retry-max-time 90 -A "$USER_AGENT" --data-urlencode "data=$query" -o "$places" "$NEIGHBOUR_URL" || {
-    echo "found '$request' but could not get its nearby places (service busy), try again" >&2
-    echo "found '$request' but could not get its nearby places (service busy), try again"
+  # ask the same service for every POI within POI_RADIUS metres of that point
+  curl -sf -G \
+    --data-urlencode "geometry=$longitude,$latitude" \
+    --data-urlencode "geometryType=esriGeometryPoint" \
+    --data-urlencode "inSR=4326" \
+    --data-urlencode "distance=$POI_RADIUS" \
+    --data-urlencode "units=esriSRUnit_Meter" \
+    --data-urlencode "outFields=poiname,poitype" \
+    --data-urlencode "outSR=4326" \
+    --data-urlencode "f=json" \
+    -o "$places" "$POI_URL" || {
+    echo "could not download $POI_URL" >&2
+    echo "could not download $POI_URL"
     exit 1
   }
 
-  # Remove carriage returns to prevent trailing \r characters in JSON fields
-  tr -d '\r' < "$places" > "$clean_places"
+  # the service reports query problems as {"error": ...} instead of a failed download
+  if jq -e '.error' "$places" >/dev/null 2>&1; then
+    echo "the POI service rejected the query: $(jq -c '.error' "$places")" >&2
+    echo "the POI service rejected the query"
+    exit 1
+  fi
 
-  # turn each "name|lat|lon" line into a json entry, then remove the comma after the last one
-  neighbours=$(grep -v '^|' "$clean_places" | sed 's/^\(.*\)|\(.*\)|\(.*\)$/        { "name" : "\1", "lat" : \2, "lon" : \3 },/' | sed '$ s/,$//')
-  
-  # writing results into a json file as required
-  {
-    echo "{"
-    echo "    \"query\" : \"$request\","
-    echo "    \"lat\" : $latitude,"
-    echo "    \"lon\" : $longitude,"
-    echo "    \"neighbours\" : ["
-    [ -n "$neighbours" ] && echo "$neighbours"
-    echo "    ]"
-    echo "}"
-  } > "$json"
+  # build neighbours.json with jq: every feature except the POI itself, up to POI_LIMIT
+  jq --arg query "$request" --arg self "$(echo "$request" | tr 'a-z' 'A-Z')" \
+    --argjson lat "$latitude" --argjson lon "$longitude" --argjson limit "$POI_LIMIT" '
+    {
+      query: $query,
+      lat: $lat,
+      lon: $lon,
+      neighbours: [ .features[]
+                    | select(.attributes.poiname != null and .attributes.poiname != $self)
+                    | { name: .attributes.poiname,
+                        type: .attributes.poitype,
+                        lat:  .geometry.y,
+                        lon:  .geometry.x } ]
+                  | sort_by((.lat - $lat) * (.lat - $lat) + (.lon - $lon) * (.lon - $lon))
+                  | .[:$limit]
+    }' "$places" > "$json"
 
   # sending the json file to the client
   cat "$json"
+
 }
 
 # finds ip address of system
