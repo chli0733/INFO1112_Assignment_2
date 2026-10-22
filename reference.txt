@@ -1,15 +1,1 @@
-Summary of references:
-I have used AI
-
-
-AI use 1
-Company: GOOGLE
-Model: Gemini 3.6 Flash
-Date: <20/10/2026>
-
-Publicly accessible URL of the chat: https://gemini.google.com/app/21a9bd4f1a19584e?hl=en-AU
-
-Input prompt history:
-<
-im doing an assignment, where i need links to get the coordinates of locations (based on name) as well as neighbours (based on the location coordinates i just mentioned). find me free links for these 2
->
+no AI was used due to no Python was used
