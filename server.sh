@@ -1,4 +1,11 @@
-#!/bin/bash
+#!/usr/bin/env bash
+
+# checks whether the docker is running
+# docker run -it --name myserver -p 1234:1234 alpine sh 
+# docker cp server.sh myserver:/root/     
+# apk add bash
+# cd /root && bash server.sh
+
 
 # port constant
 PORT="${1:-1234}"
@@ -17,10 +24,11 @@ WORKDIR="/tmp/a2server"
 LOCKDIR="$WORKDIR/locks"
 
 SELF="$(readlink -f "$0")"
+PLOT_SCRIPT="$(dirname "$SELF")/plot.py"
 
 # installs required tools for the running of the server, even if they are already downloaded as confirmation
 install_tools(){
-  apk add --no-cache curl html2text gnuplot nmap-ncat iproute2 jq >/dev/null
+  apk add --no-cache curl html2text python3 py3-matplotlib nmap-ncat iproute2 jq >/dev/null
 }
 
 # handles ONE client connection (ncat runs a copy of this for each client)
@@ -160,9 +168,9 @@ handle_population(){
   # pairs years (header row) with population (ERP row)
   awk -F',' -v code="$POPULATION_ROW_CODE" '
     NR == 1 { for (i=4; i<=NF; i++) y[i]=$i }
-    $1 == code { 
-      for (i=4; i<=NF; i++) 
-      if ($i != "") print y[i] "," $i 
+    $1 == code {
+      for (i=4; i<=NF; i++)
+      if ($i != "") print y[i] "," $i
     }
   ' "$clean_csv" > "$data"
 
@@ -182,16 +190,17 @@ handle_population(){
 
   # removes old, potentially corrupted png file
   rm -f "$png"
-  # draws the line plot (x = year, y = population)
-  gnuplot 2>/dev/null <<EOF
-    set terminal png size 800,500
-    set output '$png'
-    set datafile separator ','
-    set title 'NSW estimated resident population'
-    set xlabel 'Year'
-    set ylabel 'Population'
-    plot '$data' using 1:2 with linespoints title 'NSW'
-EOF
+
+  # stop if plot.py isn't next to server.sh
+  if [ ! -f "$PLOT_SCRIPT" ]; then
+    echo "could not find $PLOT_SCRIPT (copy plot.py into the container with server.sh)" >&2
+    echo "could not create population.png (plot.py missing)"
+    exit 1
+  fi
+
+  # draws the line plot (x = year, y = population) with plot.py
+  # (the data was read from the csv with Bash/awk above; Python only draws it)
+  python3 "$PLOT_SCRIPT" "$data" "$png" 2>/dev/null
 
   # stop if the plot wasn't created
   if [ ! -s "$png" ]; then
@@ -201,7 +210,7 @@ EOF
   fi
 
   # send only the image to the client
-  cat "$png" 
+  cat "$png"
 }
 handle_poi(){
   request="$1"

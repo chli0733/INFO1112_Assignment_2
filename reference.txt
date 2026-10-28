@@ -1,1 +1,1 @@
-no AI was used due to no Python was used
+I acknowledge the use of AI (Claude Opus 5.5 at Medium Effort) for the python code plot.py for the assignment
