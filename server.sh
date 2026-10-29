@@ -1,5 +1,12 @@
 #!/usr/bin/env bash
 
+# checks whether the docker is running
+# docker run -it --name myserver -p 1234:1234 alpine sh 
+# docker cp server.sh myserver:/root/     
+# apk add bash
+# cd /root && bash server.sh
+
+
 # port constant
 PORT="${1:-1234}"
 # constants for assignment reference
@@ -45,7 +52,7 @@ handle_connection(){
   # read one request line, limited to 10s
   local request cmd arg
   # stops if nothing arrives
-  if ! IFS= read -r -t 10 request; then
+  if ! IFS= read -r -t 10 request && [ -z "$request" ]; then
     # printed to the server
     echo "ERROR: no request received" >&2
     # printed to the client
@@ -250,7 +257,7 @@ handle_poi(){
   echo "POI '$request' is at $latitude, $longitude" >&2
 
   # ask the same service for every POI within POI_RADIUS metres of that point
-  curl -sf -G \
+  curl -sf -G --max-time 20 \
     --data-urlencode "geometry=$longitude,$latitude" \
     --data-urlencode "geometryType=esriGeometryPoint" \
     --data-urlencode "inSR=4326" \
