@@ -1,12 +1,5 @@
 #!/usr/bin/env bash
 
-# checks whether the docker is running
-# docker run -it --name myserver -p 1234:1234 alpine sh 
-# docker cp server.sh myserver:/root/     
-# apk add bash
-# cd /root && bash server.sh
-
-
 # port constant
 PORT="${1:-1234}"
 # constants for assignment reference
