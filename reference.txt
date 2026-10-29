@@ -1,1 +1,1 @@
-I acknowledge the use of AI (Claude Opus 5.5 at Medium Effort) for the python code plot.py for the assignment
+I acknowledge the use of ChatGPT , using Opus 5.5 at Medium Effort, to complete plot.py for the translation of data into a graph as a png file
