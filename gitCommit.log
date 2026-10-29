@@ -1,3 +1,33 @@
+commit 83f0c987121918fc0911331e535eec7ca87d1dd3
+Author: chli0733 <chli0733@uni.sydney.edu.au>
+Date:   Thu Oct 29 21:18:01 2026 +1100
+
+    python portion of translating data to png file added into server.sh
+
+commit d22fc76f8d141e5584ee8459ebb4b3b06af228df
+Author: chli0733 <chli0733@uni.sydney.edu.au>
+Date:   Thu Oct 29 21:17:22 2026 +1100
+
+    editted reference.txt
+
+commit 0ab3f751ddffb13c22cdaed0a5f257398cb9b637
+Author: chli0733 <chli0733@uni.sydney.edu.au>
+Date:   Thu Oct 29 10:58:04 2026 +1100
+
+    reference.txt added for AI used for python usage
+
+commit 65b6f1cc3b8a27729b04030f6bc3e4eb885b4863
+Author: chli0733 <chli0733@uni.sydney.edu.au>
+Date:   Thu Oct 29 10:54:24 2026 +1100
+
+    python used for handle_population to prioritise efficiency
+
+commit 4f8166beb195256a5a59ca034ba1ce55bb6430d0
+Author: chli0733 <chli0733@uni.sydney.edu.au>
+Date:   Thu Oct 29 10:53:29 2026 +1100
+
+    edits on handle_population done
+
 commit ee9e78f60792e6836a1b7f3a01218e89608bbdcc
 Author: chli0733 <chli0733@uni.sydney.edu.au>
 Date:   Thu Oct 29 10:45:10 2026 +1100
